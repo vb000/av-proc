@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, shutil
 import git
 
 from base64 import b64encode
@@ -18,7 +18,6 @@ root = git.Repo('.', search_parent_directories=True).working_tree_dir
 work_dir = os.path.join(root, 'modules', 'av_hubert', 'avhubert')
 sys.path.insert(0, work_dir)
 
-import fairseq
 from preparation.align_mouth import landmarks_interpolate, crop_patch, write_video_ffmpeg
 import utils as avhubert_utils
 from fairseq import checkpoint_utils, options, tasks, utils
@@ -84,6 +83,7 @@ def extract_visual_features_from_video(
     # Create a temporary file for mouth_roi_path
     with tempfile.NamedTemporaryFile(suffix='.mp4') as mouth_roi:
         mouth_roi_path = mouth_roi.name
+
         # Call the preprocess_video function
         preprocess_video(origin_clip_path, mouth_roi_path, face_predictor_path, mean_face_path)
 
@@ -100,8 +100,5 @@ if __name__ == '__main__':
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
     user_dir = f"{root}/modules/av_hubert/avhubert"
 
-    features = extract_visual_features_from_video(
-        f'{root}/data/misc/avhubert_demo_video_8s.mp4',
-        face_predictor_path, mean_face_path, ckpt_path, user_dir
-    )
+    features = extract_visual_features_from_roi(f'roi.mp4', ckpt_path, user_dir)
     print(features.shape)

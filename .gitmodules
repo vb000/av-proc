@@ -1,3 +1,0 @@
-[submodule "modules/av_hubert"]
-	path = modules/av_hubert
-	url = git@github.com:facebookresearch/av_hubert.git
