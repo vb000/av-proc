@@ -1,0 +1,3 @@
+[submodule "modules/AVHuBERT"]
+	path = modules/AVHuBERT
+	url = git@github.com:facebookresearch/av_hubert.git
