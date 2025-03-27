@@ -1,14 +1,19 @@
 ## Setup
 
-1. Create env
+1. Clone
+        git clone git@github.com:vb000/av-proc.git
+        git submodule update --init --recursive
+2. Create env
         conda create -n avhubert python=3.8 -y
         conda activate avhubert
-2. Separately, clone the `avhubert` repository.
-        git clone https://github.com/facebookresearch/av_hubert.git
-        cd avhubert
-        git submodule init
-        git submodule update
-3. Install `fairseq` and `avhubert` dependencies.
+3. Downgrade `pip` to 23.1.2
+        python -m pip install --upgrade pip==23.1.2
+4. Install `fairseq` and `avhubert` dependencies.
         pip install -r requirements.txt
-        cd fairseq
-        pip install --editable ./
+        cd modules/avhubert/fairseq
+        pip install --editable .
+5. Obtain checkpoints
+        cd ../../..
+        ./download.sh
+
+
