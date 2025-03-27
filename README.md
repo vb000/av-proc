@@ -15,5 +15,7 @@
 5. Obtain checkpoints
         cd ../../..
         ./download.sh
+6. Install `ffmpeg`:
+        conda install conda-forge::ffmpeg
 
 
