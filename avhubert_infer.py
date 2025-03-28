@@ -100,5 +100,11 @@ if __name__ == '__main__':
     utils.import_user_module(Namespace(user_dir=work_dir))
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
 
-    features = extract_visual_features_from_roi(f'roi.mp4', models, task)
+    features = extract_visual_features_from_video(
+        origin_clip_path=f"{root}/data/misc/avhubert_demo_video_8s.mp4",
+        face_predictor_path=face_predictor_path,
+        mean_face_path=mean_face_path,
+        models=models,
+        task=task
+    )
     print(features.shape) # [seq_len, 768]
