@@ -1,3 +1,6 @@
 [submodule "modules/AVHuBERT"]
 	path = modules/AVHuBERT
 	url = git@github.com:vb000/av_hubert.git
+[submodule "modules/dlib"]
+	path = modules/dlib
+	url = https://github.com/davisking/dlib.git
