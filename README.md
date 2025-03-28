@@ -20,12 +20,17 @@
         pip install -r requirements.txt
         cd modules/avhubert/fairseq
         pip install --editable .
+        cd ../../..
 
-5. Obtain checkpoints
+5. Install `ffmpeg`
+
+        conda install conda-forge::ffmpeg
+
+6. Install `dlib`
+
+        CUDA_BIN=/path/to/cuda/bin ./install_dlib.sh
+
+6. Obtain checkpoints
 
         cd ../../..
         ./download.sh
-
-6. Install `ffmpeg`
-
-        conda install conda-forge::ffmpeg
