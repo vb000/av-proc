@@ -101,4 +101,4 @@ if __name__ == '__main__':
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
 
     features = extract_visual_features_from_roi(f'roi.mp4', models, task)
-    print(features.shape)
+    print(features.shape) # [seq_len, 768]
