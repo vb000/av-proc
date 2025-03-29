@@ -14,4 +14,4 @@ torch==1.10.0
 torchaudio==0.10.0
 ipykernel
 GitPython
-dlib
+cmake==3.26.0

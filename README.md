@@ -28,7 +28,8 @@
 
 6. Install `dlib`
 
-        CUDA_BIN=/path/to/cuda/bin ./install_dlib.sh
+        conda install cuda cudnn cuda-version=11.8 -c nvidia
+        ./install_dlib.sh
 
 6. Obtain checkpoints
 
