@@ -8,8 +8,10 @@
 
 2. Create env
 
-        conda create -n avhubert python=3.8 -y
-        conda activate avhubert
+        conda create -n avhubert_gpu python=3.8 -y
+        conda activate avhubert_gpu
+        conda install pytorch==1.10.0 torchaudio==0.10.0 cudatoolkit=10.2 -c pytorch
+        conda install conda-forge::ffmpeg
 
 3. Downgrade `pip` to 23.1.2
 
@@ -22,13 +24,8 @@
         pip install --editable .
         cd ../../..
 
-5. Install `ffmpeg`
+5. Install `dlib`
 
-        conda install conda-forge::ffmpeg
-
-6. Install `dlib`
-
-        conda install cuda cudnn cuda-version=11.8 -c nvidia
         ./install_dlib.sh
 
 6. Obtain checkpoints

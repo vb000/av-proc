@@ -1,3 +1,4 @@
+cmake==3.26.0
 hydra_core==1.0.7
 omegaconf==2.0.6
 sacrebleu==2.0.0
@@ -10,8 +11,5 @@ sentencepiece==0.1.96
 editdistance==0.6.0
 numpy==1.19.5
 antlr4-python3-runtime==4.8
-torch==1.10.0
-torchaudio==0.10.0
 ipykernel
 GitPython
-cmake==3.26.0
