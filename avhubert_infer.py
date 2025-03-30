@@ -11,7 +11,7 @@ import tempfile
 import torch
 from argparse import Namespace
 
-FFMPEG = '/mmfs1/gscratch/cse/bandhav/miniconda3/envs/avhubert/bin/ffmpeg'
+FFMPEG = '/mmfs1/gscratch/cse/bandhav/miniconda3/envs/avhubert_gpu/bin/ffmpeg'
 os.environ['PATH'] = f'{os.path.dirname(FFMPEG)}:' + os.environ['PATH']
 
 root = git.Repo('.', search_parent_directories=True).working_tree_dir
@@ -23,9 +23,14 @@ import utils as avhubert_utils
 from fairseq import checkpoint_utils, options, tasks, utils
 
 
-def detect_landmark(image, detector, predictor):
+def detect_landmark(image, detector, predictor, cnn_detector=False):
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    rects = detector(gray, 1)
+    if cnn_detector:
+        dets = detector(gray, 1)
+        rects = dlib.rectangles()
+        rects.extend([d.rect for d in dets])
+    else:
+        rects = detector(gray, 1)
     coords = None
     for (_, rect) in enumerate(rects):
         shape = predictor(gray, rect)
@@ -35,8 +40,12 @@ def detect_landmark(image, detector, predictor):
     return coords
 
 
-def preprocess_video(input_video_path, output_video_path, face_predictor_path, mean_face_path):
-    detector = dlib.get_frontal_face_detector()
+def preprocess_video(input_video_path, output_video_path, face_predictor_path, mean_face_path,
+                     cnn_detector_path=None):
+    if cnn_detector_path is not None:
+        detector = dlib.cnn_face_detection_model_v1(cnn_detector_path)
+    else:
+        detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(face_predictor_path)
     STD_SIZE = (256, 256)
     mean_face_landmarks = np.load(mean_face_path)
@@ -45,7 +54,7 @@ def preprocess_video(input_video_path, output_video_path, face_predictor_path, m
     frames = np.array([frame for frame in videogen])
     landmarks = []
     for frame in tqdm(frames):
-        landmark = detect_landmark(frame, detector, predictor)
+        landmark = detect_landmark(frame, detector, predictor, cnn_detector=cnn_detector_path is not None)
         landmarks.append(landmark)
     preprocessed_landmarks = landmarks_interpolate(landmarks)
     rois = crop_patch(input_video_path, preprocessed_landmarks, mean_face_landmarks, stablePntsIDs, STD_SIZE, 
@@ -76,14 +85,16 @@ def extract_visual_features_from_roi(video_path, models, task):
 
 
 def extract_visual_features_from_video(
-    origin_clip_path, face_predictor_path, mean_face_path, models, task
+    origin_clip_path, face_predictor_path, mean_face_path, models, task, cnn_detector_path=None
 ):
     # Create a temporary file for mouth_roi_path
     with tempfile.NamedTemporaryFile(suffix='.mp4') as mouth_roi:
         mouth_roi_path = mouth_roi.name
 
         # Call the preprocess_video function
-        preprocess_video(origin_clip_path, mouth_roi_path, face_predictor_path, mean_face_path)
+        preprocess_video(
+            origin_clip_path, mouth_roi_path, face_predictor_path, mean_face_path,
+            cnn_detector_path=cnn_detector_path)
 
         # Call the feature extraction function
         feature = extract_visual_features_from_roi(mouth_roi_path, models, task)
@@ -96,6 +107,7 @@ if __name__ == '__main__':
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
+    cnn_detector_path = f'{root}/data/misc/mmod_human_face_detector.dat'
 
     utils.import_user_module(Namespace(user_dir=work_dir))
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
@@ -105,6 +117,7 @@ if __name__ == '__main__':
         face_predictor_path=face_predictor_path,
         mean_face_path=mean_face_path,
         models=models,
-        task=task
+        task=task,
+        cnn_detector_path=cnn_detector_path
     )
     print(features.shape) # [seq_len, 768]
