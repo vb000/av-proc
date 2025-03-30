@@ -8,5 +8,9 @@
 
 2. Create env
 
-        module load cuda/11.3.0 # Make sure cuda is available
+        conda create -n avhubert_gpu python=3.8 -y
+        conda activate avhubert_gpu
+
+3. Install dependencies
+
         ./setup.sh
