@@ -53,7 +53,7 @@ def preprocess_video(input_video_path, output_video_path, face_predictor_path, m
     videogen = skvideo.io.vread(input_video_path)
     frames = np.array([frame for frame in videogen])
     landmarks = []
-    for frame in tqdm(frames):
+    for frame in frames:
         landmark = detect_landmark(frame, detector, predictor, cnn_detector=cnn_detector_path is not None)
         landmarks.append(landmark)
     preprocessed_landmarks = landmarks_interpolate(landmarks)
