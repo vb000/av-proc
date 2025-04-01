@@ -7,7 +7,7 @@ conda install -y conda-forge::ffmpeg
 
 # Install pip and requirements
 python -m pip install --upgrade pip==23.1.2
-pip install -r requirements.txt
+pip install -r avhubert_requirements.txt
 
 # Install fairseq
 cd modules/AVHuBERT/fairseq
@@ -15,6 +15,7 @@ pip install --editable .
 cd ../../..
 
 # Install dlib
+# Thanks to https://gist.github.com/nguyenhoan1988/ed92d58054b985a1b45a521fcf8fa781!
 conda install -y cuda cudnn -c nvidia
 rm -rf modules/dlib/build
 cd modules/dlib
