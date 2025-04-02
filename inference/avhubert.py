@@ -166,6 +166,7 @@ def visual_speech_recognition(
 
     return hypo
 
+
 if __name__ == '__main__':
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"

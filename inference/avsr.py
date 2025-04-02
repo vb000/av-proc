@@ -7,6 +7,8 @@ import math
 
 import pandas as pd
 from tqdm import tqdm
+import submitit
+
 
 def main(video_zip, rank, world_size, out_dir, num_samples=None):
     """Process a chunk of videos to extract transcriptions"""
@@ -114,14 +116,11 @@ if __name__ == "__main__":
                         help='Directory containing the video files to process')
     parser.add_argument('--out_dir', type=str, default='data/vsr_outputs',
                         help='Path to save output CSV file')
+    parser.add_argument('--num_jobs', type=int, default=64,
+                        help='Number of Slurm jobs to run in parallel')
     args = parser.parse_args()
 
-    os.makedirs(args.out_dir)
-
-    # Launch 64 batch jobs using submitit
-    import submitit
-
-    num_jobs = 32  # Number of Slurm jobs
+    os.makedirs(args.out_dir, exist_ok=True)  # Create output directory if it doesn't exist
 
     executor = submitit.AutoExecutor(folder=args.out_dir)
     executor.update_parameters(
@@ -137,11 +136,11 @@ if __name__ == "__main__":
         nodes=1,
     )
 
-    video_zip = [args.video_zip_dir for _ in range(num_jobs)]  # Replicate the video_zip path for each job
-    rank = [ i for i in range(num_jobs)]  # Create a list of ranks from 0 to num_jobs-1
-    world_size = [num_jobs for _ in range(num_jobs)]  # All jobs have the same world size
-    out_dir = [args.out_dir for _ in range(num_jobs)]  # Replicate the out_dir path for each job
-    num_samples = [None for _ in range(num_jobs)]  # Set to None to process all videos, or specify a limit
+    video_zip = [args.video_zip_dir for _ in range(args.num_jobs)]  # Replicate the video_zip path for each job
+    rank = [ i for i in range(args.num_jobs)]  # Create a list of ranks from 0 to num_jobs-1
+    world_size = [args.num_jobs for _ in range(args.num_jobs)]  # All jobs have the same world size
+    out_dir = [args.out_dir for _ in range(args.num_jobs)]  # Replicate the out_dir path for each job
+    num_samples = [None for _ in range(args.num_jobs)]  # Set to None to process all videos, or specify a limit
     executor.map_array(
         main,
         video_zip,
