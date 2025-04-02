@@ -167,8 +167,44 @@ def visual_speech_recognition(
     return hypo
 
 
-def main(video_paths_chunk, out_file, work_dir):
+def main(video_zip, rank, world_size, out_dir, work_dir, num_samples=None):
     """Process a chunk of videos to extract transcriptions"""
+
+    out_file = os.path.join(out_dir, f"vsr_results_rank{rank:03d}.csv")
+
+    # Unzip `video_zip` to `/scr` directory
+    print(f"Extracting zip file {video_zip} to /scr directory...")
+    extract_dir = "/scr/vox2_test_mp4"
+    if os.path.exists(extract_dir):
+        os.rmdir(extract_dir)  # Remove existing directory to avoid conflicts
+    os.makedirs(extract_dir)
+    with zipfile.ZipFile(video_zip, 'r') as zip_ref:
+        zip_ref.extractall(extract_dir)
+    print("Extraction complete")
+
+    # Find all mp4 files in the extracted directory
+    print("Finding all mp4 files...")
+    video_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.mp4"), recursive=True))
+    if not video_paths:
+        print(f"No video files found in {extract_dir}")
+        return
+    print(f"Found {len(video_paths)} video files in {extract_dir}")
+
+    # Split video paths into chunks for processing
+    num_videos = len(video_paths)
+    num_chunks = world_size
+    chunk_size = math.ceil(num_videos / num_chunks)
+    start_index = rank * chunk_size
+    end_index = min(start_index + chunk_size, num_videos)
+    if start_index >= num_videos:
+        print(f"No videos to process for rank {rank}, exiting...")
+        return
+    video_paths_chunk = video_paths[start_index:end_index]
+    if not video_paths_chunk:
+        print(f"No videos found for rank {rank}, exiting...")
+        return
+    print(f"Processing {len(video_paths_chunk)} videos for rank {rank}...")
+
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
@@ -186,13 +222,17 @@ def main(video_paths_chunk, out_file, work_dir):
             print(f"Found {len(processed_videos)} already processed videos")
         except Exception as e:
             print(f"Error reading existing output file: {e}")
-    
+
     # Create output file if it doesn't exist
     if not os.path.exists(out_file):
         pd.DataFrame(columns=['video_path', 'vsr_text']).to_csv(out_file, index=False)
-    
+
     # Process each video and extract transcriptions
     for i, video_path in enumerate(tqdm(video_paths_chunk)):
+        if num_samples is not None and i >= num_samples:
+            print(f"Reached sample limit of {num_samples}, stopping processing.")
+            break
+
         if video_path in processed_videos:
             print(f"Skipping already processed video: {video_path}")
             continue
@@ -224,23 +264,21 @@ def main(video_paths_chunk, out_file, work_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
-    parser.add_argument('--video_dir', type=str,
-                        default='/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM',
+    parser.add_argument('--video_zip_dir', type=str,
+                        default='/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/vox2_test_mp4.zip',
                         help='Directory containing the video files to process')
     parser.add_argument('--out_file', type=str, default='./vsr_results.csv',
                         help='Path to save output CSV file')
     args = parser.parse_args()
-    
-    # Find all mp4 files in the specified directory
-    video_paths = sorted(glob.glob(os.path.join(args.video_dir, "*.mp4")))
-    print(f"Found {len(video_paths)} video files in {args.video_dir}")
 
-    if not video_paths:
-        print(f"No video files found in {args.video_dir}")
-        sys.exit(1)
-
-    # Process the videos
-    main(video_paths, args.out_file, work_dir)
+    main(
+        video_zip=args.video_zip_dir,
+        rank=0,  # For single process execution, rank is 0
+        world_size=16,  # For single process execution, world_size is 1
+        out_dir=os.path.dirname(args.out_file),
+        work_dir=work_dir,
+        num_samples=10
+    )
 
 
 # if __name__ == '__main__':
