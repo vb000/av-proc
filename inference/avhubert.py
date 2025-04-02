@@ -4,6 +4,9 @@ import glob
 import argparse
 from argparse import Namespace
 import tempfile
+import zipfile
+import subprocess
+import math
 
 import git
 import pandas as pd
@@ -164,13 +167,8 @@ def visual_speech_recognition(
     return hypo
 
 
-if __name__ == '__main__':
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
-    parser.add_argument('video_dir', type=str, help='Path to the directory containing video files')
-    parser.add_argument('--out_file', type=str, required=True, help='Path to save output CSV file')
-    args = parser.parse_args()
-
+def main(video_paths_chunk, out_file, work_dir):
+    """Process a chunk of videos to extract transcriptions"""
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
@@ -178,44 +176,163 @@ if __name__ == '__main__':
 
     utils.import_user_module(Namespace(user_dir=work_dir))
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
-    def get_video_paths(directory):
-        """Get all mp4 file paths from a directory recursively."""
-        mp4_files = glob.glob(os.path.join(directory, "**", "*.mp4"), recursive=True)
-        return mp4_files
 
-    # Get video paths
-    video_paths = get_video_paths(args.video_dir)
-    print(f"Found {len(video_paths)} video files")
+    # Check for existing output and load already processed videos
+    processed_videos = set()
+    if os.path.exists(out_file):
+        try:
+            existing_df = pd.read_csv(out_file)
+            processed_videos = set(existing_df['video_path'].tolist())
+            print(f"Found {len(processed_videos)} already processed videos")
+        except Exception as e:
+            print(f"Error reading existing output file: {e}")
+    
+    # Create output file if it doesn't exist
+    if not os.path.exists(out_file):
+        pd.DataFrame(columns=['video_path', 'vsr_text']).to_csv(out_file, index=False)
+    
+    # Process each video and extract transcriptions
+    for i, video_path in enumerate(tqdm(video_paths_chunk)):
+        if video_path in processed_videos:
+            print(f"Skipping already processed video: {video_path}")
+            continue
+        if not os.path.isfile(video_path): 
+            print(f"File not found, skipping: {video_path}")
+            continue
+        # Ensure the video path is valid
+        video_path = os.path.abspath(video_path) 
+        try:
+            # Use the visual_speech_recognition function to get the transcription
+            transcription = visual_speech_recognition(
+                video_path,
+                face_predictor_path,
+                mean_face_path,
+                models,
+                saved_cfg,
+                task,
+                cnn_detector_path=cnn_detector_path
+            )
 
-    # # Create pandas dataframe
-    # df = pd.DataFrame({'video_path': video_paths})
+            # Save the result to the output file
+            new_entry = pd.DataFrame({'video_path': [video_path], 'vsr_text': [transcription]})
+            new_entry.to_csv(out_file, mode='a', header=False, index=False)
+            print(f"Processed video {i + 1}/{len(video_paths_chunk)}: {video_path} -> {transcription}")
+        except Exception as e:
+            print(f"Error processing video {video_path}: {e}")
+    print(f"Completed processing {len(video_paths_chunk)} videos. Results saved to {out_file}.")
 
-    # # Initialize empty list to store transcriptions
-    # transcriptions = []
 
-    # # Process each video and extract transcriptions
-    # print("Transcribing videos...")
-    # for video_path in tqdm(video_paths):
-    #     try:
-    #         # Use the visual_speech_recognition function to get the transcription
-    #         transcription = visual_speech_recognition(
-    #             video_path,
-    #             face_predictor_path,
-    #             mean_face_path,
-    #             models,
-    #             saved_cfg,
-    #             task,
-    #             cnn_detector_path=cnn_detector_path
-    #         )
-    #         transcriptions.append(transcription)
-    #     except Exception as e:
-    #         # Handle errors
-    #         print(f"Error processing {video_path}: {e}")
-    #         transcriptions.append(None)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
+    parser.add_argument('--video_dir', type=str, default='~/uwx/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM',
+                        help='Directory containing the video files to process')
+    parser.add_argument('--out_file', type=str, default='./vsr_results.csv',
+                        help='Path to save output CSV file')
+    args = parser.parse_args()
+    
+    # Expand user directory if needed    
+    video_dir = os.path.expanduser(args.video_dir)
 
-    # # Add transcriptions to the dataframe
-    # df['vsr_text'] = transcriptions
+    # Find all mp4 files in the specified directory
+    video_paths = sorted(glob.glob(os.path.join(video_dir, "*.mp4")))
+    print(f"Found {len(video_paths)} video files in {video_dir}")
 
-    # # Save the dataframe to a CSV file
-    # df.to_csv(args.out_file, index=False)
-    # print(f"Transcriptions saved to {args.out_file}")
+    if not video_paths:
+        print(f"No video files found in {video_dir}")
+        sys.exit(1)
+
+    # Process the videos
+    main(video_paths, args.out_file, work_dir)
+
+
+# if __name__ == '__main__':
+#     # Parse command line arguments
+#     parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
+#     parser.add_argument(
+#         '--video_zip_file', type=str,
+#         default="/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/vox2_test_mp4.zip",
+#         help='Path to the directory containing video files'
+#     )
+#     parser.add_argument('--out_file', type=str, required=True, help='Path to save output CSV file')
+#     args = parser.parse_args()
+
+#     # Extract the zip file to /scr
+#     print("Extracting zip file to /scr directory...")
+#     os.makedirs("/scr", exist_ok=True)
+#     extract_dir = "/scr/vox2_test_mp4"
+#     os.makedirs(extract_dir, exist_ok=True)
+
+#     # Check if files are already extracted
+#     if not os.path.exists(os.path.join(extract_dir, "mp4")):
+#         with zipfile.ZipFile(args.video_zip_file, 'r') as zip_ref:
+#             zip_ref.extractall(extract_dir)
+#         print("Extraction complete")
+#     else:
+#         print("Files already extracted, skipping extraction")
+
+#     # Find all mp4 files in the extracted directory
+#     print("Finding all mp4 files...")
+#     video_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.mp4"), recursive=True))
+#     print(f"Found {len(video_paths)} video files")
+
+#     # Create a dataframe with all video paths
+#     all_videos_df = pd.DataFrame({'video_path': video_paths})
+
+#     # Number of Slurm jobs
+#     num_jobs = 128
+
+#     # Calculate chunk size for approximately equal splits
+#     chunk_size = math.ceil(len(video_paths) / num_jobs)
+
+#     # Function to launch a Slurm job
+#     def launch_slurm_job(job_id, video_chunk, base_out_file):
+#         chunk_out_file = f"{os.path.splitext(base_out_file)[0]}_{job_id}{os.path.splitext(base_out_file)[1]}"
+#         chunk_file = f"/tmp/video_chunk_{job_id}.txt"
+
+#         # Save the chunk paths to a temporary file
+#         with open(chunk_file, "w") as f:
+#             for path in video_chunk:
+#                 f.write(f"{path}\n")
+
+#         # Create the Slurm job script
+#         slurm_script  = f"#!/bin/bash\n"
+#         slurm_script += f"#SBATCH --job-name=avhubert_{job_id}\n"
+#         slurm_script += f"#SBATCH --output=avhubert_{job_id}_%j.out\n"
+#         slurm_script += f"#SBATCH --error=avhubert_{job_id}_%j.err\n"
+#         slurm_script += f"#SBATCH --partition=gpu-rtx6k\n"
+#         slurm_script += f"#SBATCH --gres=gpu:1\n"
+#         slurm_script += f"#SBATCH --cpus-per-task=4\n"
+#         slurm_script += f"#SBATCH --mem=16G\n"
+#         slurm_script += f"#SBATCH --time=24:00:00\n\n"
+#         slurm_script += f"cd {os.getcwd()}\n"
+#         slurm_script += f"python -c \"import sys, os\n"
+#         slurm_script += f"sys.path.insert(0, '{os.getcwd()}')\n"
+#         slurm_script += f"from inference.avhubert import main, work_dir\n\n"
+#         slurm_script += f"# Load the video paths\n"
+#         slurm_script += f"with open('{chunk_file}', 'r') as f:\n"
+#         slurm_script += f"    video_paths = [line.strip() for line in f.readlines()]\n\n"
+#         slurm_script += f"# Process the videos\n"
+#         slurm_script += f"main(video_paths, '{chunk_out_file}', '{work_dir}')\n"
+#         slurm_script += f"\""
+
+#         # Write the Slurm script to a file
+#         script_file = f"/tmp/slurm_job_{job_id}.sh"
+#         with open(script_file, "w") as f:
+#             f.write(slurm_script)
+
+#         # Submit the job
+#         subprocess.run(["sbatch", script_file])
+#         print(f"Submitted job {job_id}")
+
+#     # Launch Slurm jobs for each chunk
+#     for job_id in range(num_jobs):
+#         start_index = job_id * chunk_size
+#         end_index = min(start_index + chunk_size, len(video_paths))
+#         video_chunk = video_paths[start_index:end_index]
+
+#         if not video_chunk:
+#             print(f"No videos found for job {job_id}, skipping...")
+#             continue
+
+#         launch_slurm_job(job_id, video_chunk, args.out_file)
+#     print("All Slurm jobs have been submitted.")
