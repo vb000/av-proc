@@ -1,15 +1,18 @@
 import os, sys, shutil
-import git
-
 from base64 import b64encode
+import glob
+import argparse
+from argparse import Namespace
+import tempfile
+
+import git
+import pandas as pd
 import dlib, cv2, os
 import numpy as np
 import skvideo
 import skvideo.io
 from tqdm import tqdm
-import tempfile
 import torch
-from argparse import Namespace
 
 FFMPEG = '/mmfs1/gscratch/cse/bandhav/miniconda3/envs/avhubert_gpu/bin/ffmpeg'
 os.environ['PATH'] = f'{os.path.dirname(FFMPEG)}:' + os.environ['PATH']
@@ -59,7 +62,7 @@ def preprocess_video(input_video_path, output_video_path, face_predictor_path, m
         landmark = detect_landmark(frame, detector, predictor, cnn_detector=cnn_detector_path is not None)
         landmarks.append(landmark)
     preprocessed_landmarks = landmarks_interpolate(landmarks)
-    rois = crop_patch(input_video_path, preprocessed_landmarks, mean_face_landmarks, stablePntsIDs, STD_SIZE, 
+    rois = crop_patch(input_video_path, preprocessed_landmarks, mean_face_landmarks, stablePntsIDs, STD_SIZE,
                         window_margin=12, start_idx=48, stop_idx=68, crop_height=96, crop_width=96)
     write_video_ffmpeg(rois, output_video_path, FFMPEG)
     return
@@ -162,6 +165,12 @@ def visual_speech_recognition(
 
 
 if __name__ == '__main__':
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
+    parser.add_argument('video_dir', type=str, help='Path to the directory containing video files')
+    parser.add_argument('--out_file', type=str, required=True, help='Path to save output CSV file')
+    args = parser.parse_args()
+
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
@@ -169,24 +178,44 @@ if __name__ == '__main__':
 
     utils.import_user_module(Namespace(user_dir=work_dir))
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
+    def get_video_paths(directory):
+        """Get all mp4 file paths from a directory recursively."""
+        mp4_files = glob.glob(os.path.join(directory, "**", "*.mp4"), recursive=True)
+        return mp4_files
 
-    # features = extract_visual_features_from_video(
-    #     origin_clip_path=f"{root}/data/misc/avhubert_demo_video_8s.mp4",
-    #     face_predictor_path=face_predictor_path,
-    #     mean_face_path=mean_face_path,
-    #     models=models,
-    #     task=task,
-    #     cnn_detector_path=cnn_detector_path
-    # )
-    # print(features.shape) # [seq_len, 768]
+    # Get video paths
+    video_paths = get_video_paths(args.video_dir)
+    print(f"Found {len(video_paths)} video files")
 
-    hypo = visual_speech_recognition(
-        video_path=f"{root}/data/misc/avhubert_demo_video_8s.mp4",
-        face_predictor_path=face_predictor_path,
-        mean_face_path=mean_face_path,
-        models=models,
-        saved_cfg=saved_cfg,
-        task=task,
-        cnn_detector_path=cnn_detector_path
-    )
-    print(hypo)
+    # # Create pandas dataframe
+    # df = pd.DataFrame({'video_path': video_paths})
+
+    # # Initialize empty list to store transcriptions
+    # transcriptions = []
+
+    # # Process each video and extract transcriptions
+    # print("Transcribing videos...")
+    # for video_path in tqdm(video_paths):
+    #     try:
+    #         # Use the visual_speech_recognition function to get the transcription
+    #         transcription = visual_speech_recognition(
+    #             video_path,
+    #             face_predictor_path,
+    #             mean_face_path,
+    #             models,
+    #             saved_cfg,
+    #             task,
+    #             cnn_detector_path=cnn_detector_path
+    #         )
+    #         transcriptions.append(transcription)
+    #     except Exception as e:
+    #         # Handle errors
+    #         print(f"Error processing {video_path}: {e}")
+    #         transcriptions.append(None)
+
+    # # Add transcriptions to the dataframe
+    # df['vsr_text'] = transcriptions
+
+    # # Save the dataframe to a CSV file
+    # df.to_csv(args.out_file, index=False)
+    # print(f"Transcriptions saved to {args.out_file}")
