@@ -16,3 +16,4 @@ torchaudio==0.10.0
 ipykernel
 GitPython
 pandas
+submitit

@@ -267,108 +267,40 @@ if __name__ == "__main__":
     parser.add_argument('--video_zip_dir', type=str,
                         default='/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/vox2_test_mp4.zip',
                         help='Directory containing the video files to process')
-    parser.add_argument('--out_file', type=str, default='./vsr_results.csv',
+    parser.add_argument('--out_dir', type=str, default='data/vsr_outputs',
                         help='Path to save output CSV file')
     args = parser.parse_args()
 
-    main(
-        video_zip=args.video_zip_dir,
-        rank=0,  # For single process execution, rank is 0
-        world_size=16,  # For single process execution, world_size is 1
-        out_dir=os.path.dirname(args.out_file),
-        work_dir=work_dir,
-        num_samples=10
+    os.makedirs(args.out_dir)
+
+    # Launch 64 batch jobs using submitit
+    import submitit
+
+    num_jobs = 64  # Number of Slurm jobs
+    executor = submitit.AutoExecutor(folder=args.out_dir)
+    executor.update_parameters(
+        slurm_partition="gpu-rtx6k",
+        slurm_gres="gpu:1",
+        slurm_time="24:00:00",
+        slurm_mem="16G",
+        slurm_constraint="rtx6k",
+        job_name="avhubert_vsr",
+        nodes=1,
+        tasks_per_node=1,
     )
 
-
-# if __name__ == '__main__':
-#     # Parse command line arguments
-#     parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
-#     parser.add_argument(
-#         '--video_zip_file', type=str,
-#         default="/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/vox2_test_mp4.zip",
-#         help='Path to the directory containing video files'
-#     )
-#     parser.add_argument('--out_file', type=str, required=True, help='Path to save output CSV file')
-#     args = parser.parse_args()
-
-#     # Extract the zip file to /scr
-#     print("Extracting zip file to /scr directory...")
-#     os.makedirs("/scr", exist_ok=True)
-#     extract_dir = "/scr/vox2_test_mp4"
-#     os.makedirs(extract_dir, exist_ok=True)
-
-#     # Check if files are already extracted
-#     if not os.path.exists(os.path.join(extract_dir, "mp4")):
-#         with zipfile.ZipFile(args.video_zip_file, 'r') as zip_ref:
-#             zip_ref.extractall(extract_dir)
-#         print("Extraction complete")
-#     else:
-#         print("Files already extracted, skipping extraction")
-
-#     # Find all mp4 files in the extracted directory
-#     print("Finding all mp4 files...")
-#     video_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.mp4"), recursive=True))
-#     print(f"Found {len(video_paths)} video files")
-
-#     # Create a dataframe with all video paths
-#     all_videos_df = pd.DataFrame({'video_path': video_paths})
-
-#     # Number of Slurm jobs
-#     num_jobs = 128
-
-#     # Calculate chunk size for approximately equal splits
-#     chunk_size = math.ceil(len(video_paths) / num_jobs)
-
-#     # Function to launch a Slurm job
-#     def launch_slurm_job(job_id, video_chunk, base_out_file):
-#         chunk_out_file = f"{os.path.splitext(base_out_file)[0]}_{job_id}{os.path.splitext(base_out_file)[1]}"
-#         chunk_file = f"/tmp/video_chunk_{job_id}.txt"
-
-#         # Save the chunk paths to a temporary file
-#         with open(chunk_file, "w") as f:
-#             for path in video_chunk:
-#                 f.write(f"{path}\n")
-
-#         # Create the Slurm job script
-#         slurm_script  = f"#!/bin/bash\n"
-#         slurm_script += f"#SBATCH --job-name=avhubert_{job_id}\n"
-#         slurm_script += f"#SBATCH --output=avhubert_{job_id}_%j.out\n"
-#         slurm_script += f"#SBATCH --error=avhubert_{job_id}_%j.err\n"
-#         slurm_script += f"#SBATCH --partition=gpu-rtx6k\n"
-#         slurm_script += f"#SBATCH --gres=gpu:1\n"
-#         slurm_script += f"#SBATCH --cpus-per-task=4\n"
-#         slurm_script += f"#SBATCH --mem=16G\n"
-#         slurm_script += f"#SBATCH --time=24:00:00\n\n"
-#         slurm_script += f"cd {os.getcwd()}\n"
-#         slurm_script += f"python -c \"import sys, os\n"
-#         slurm_script += f"sys.path.insert(0, '{os.getcwd()}')\n"
-#         slurm_script += f"from inference.avhubert import main, work_dir\n\n"
-#         slurm_script += f"# Load the video paths\n"
-#         slurm_script += f"with open('{chunk_file}', 'r') as f:\n"
-#         slurm_script += f"    video_paths = [line.strip() for line in f.readlines()]\n\n"
-#         slurm_script += f"# Process the videos\n"
-#         slurm_script += f"main(video_paths, '{chunk_out_file}', '{work_dir}')\n"
-#         slurm_script += f"\""
-
-#         # Write the Slurm script to a file
-#         script_file = f"/tmp/slurm_job_{job_id}.sh"
-#         with open(script_file, "w") as f:
-#             f.write(slurm_script)
-
-#         # Submit the job
-#         subprocess.run(["sbatch", script_file])
-#         print(f"Submitted job {job_id}")
-
-#     # Launch Slurm jobs for each chunk
-#     for job_id in range(num_jobs):
-#         start_index = job_id * chunk_size
-#         end_index = min(start_index + chunk_size, len(video_paths))
-#         video_chunk = video_paths[start_index:end_index]
-
-#         if not video_chunk:
-#             print(f"No videos found for job {job_id}, skipping...")
-#             continue
-
-#         launch_slurm_job(job_id, video_chunk, args.out_file)
-#     print("All Slurm jobs have been submitted.")
+    video_zip = [args.video_zip_dir for _ in range(num_jobs)]  # Replicate the video_zip path for each job
+    rank = [ i for i in range(num_jobs)]  # Create a list of ranks from 0 to num_jobs-1
+    world_size = [num_jobs for _ in range(num_jobs)]  # All jobs have the same world size
+    out_dir = [args.out_dir for _ in range(num_jobs)]  # Replicate the out_dir path for each job
+    work_dir = [work_dir for _ in range(num_jobs)]  # Replicate the work_dir path for each job
+    executor.map_array(
+        main,
+        video_zip,
+        rank,
+        world_size,
+        out_dir,
+        work_dir,
+        num_samples=None  # Set to None to process all videos
+    )
+    print("All jobs have been submitted.")
