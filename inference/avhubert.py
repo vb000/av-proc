@@ -224,21 +224,19 @@ def main(video_paths_chunk, out_file, work_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
-    parser.add_argument('--video_dir', type=str, default='~/uwx/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM',
+    parser.add_argument('--video_dir', type=str,
+                        default='/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM',
                         help='Directory containing the video files to process')
     parser.add_argument('--out_file', type=str, default='./vsr_results.csv',
                         help='Path to save output CSV file')
     args = parser.parse_args()
     
-    # Expand user directory if needed    
-    video_dir = os.path.expanduser(args.video_dir)
-
     # Find all mp4 files in the specified directory
-    video_paths = sorted(glob.glob(os.path.join(video_dir, "*.mp4")))
-    print(f"Found {len(video_paths)} video files in {video_dir}")
+    video_paths = sorted(glob.glob(os.path.join(args.video_dir, "*.mp4")))
+    print(f"Found {len(video_paths)} video files in {args.video_dir}")
 
     if not video_paths:
-        print(f"No video files found in {video_dir}")
+        print(f"No video files found in {args.video_dir}")
         sys.exit(1)
 
     # Process the videos
