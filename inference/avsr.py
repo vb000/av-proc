@@ -21,7 +21,7 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
 
     # Unzip `video_zip` to `/scr` directory
     print(f"Extracting zip file {video_zip} to /scr directory...")
-    extract_dir = "/scr/vox2_test_mp4"
+    extract_dir = f"/scr/vox2_test_mp4/{rank:03d}"
     if os.path.exists(extract_dir):
         os.rmdir(extract_dir)  # Remove existing directory to avoid conflicts
     os.makedirs(extract_dir)
@@ -122,7 +122,12 @@ if __name__ == "__main__":
 
     os.makedirs(args.out_dir, exist_ok=True)  # Create output directory if it doesn't exist
 
-    executor = submitit.AutoExecutor(folder=args.out_dir)
+    # Create logs directory inside out_dir
+    log_dir = os.path.join(args.out_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Initialize executor with logs directory
+    executor = submitit.AutoExecutor(folder=log_dir)
     executor.update_parameters(
         slurm_partition="ckpt",
         slurm_gres="gpu:1",
