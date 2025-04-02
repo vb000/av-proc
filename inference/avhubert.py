@@ -277,16 +277,19 @@ if __name__ == "__main__":
     import submitit
 
     num_jobs = 64  # Number of Slurm jobs
+
     executor = submitit.AutoExecutor(folder=args.out_dir)
     executor.update_parameters(
-        slurm_partition="gpu-rtx6k",
+        slurm_partition="ckpt",
         slurm_gres="gpu:1",
+        slurm_account="intelligentsystems",
+        slurm_ntasks_per_node=1,
         slurm_time="24:00:00",
         slurm_mem="16G",
         slurm_constraint="rtx6k",
-        job_name="avhubert_vsr",
+        cpus_per_task=8,  # Increase CPUs per task to match cluster configuration
+        name="avhubert_vsr",
         nodes=1,
-        tasks_per_node=1,
     )
 
     video_zip = [args.video_zip_dir for _ in range(num_jobs)]  # Replicate the video_zip path for each job
@@ -294,6 +297,7 @@ if __name__ == "__main__":
     world_size = [num_jobs for _ in range(num_jobs)]  # All jobs have the same world size
     out_dir = [args.out_dir for _ in range(num_jobs)]  # Replicate the out_dir path for each job
     work_dir = [work_dir for _ in range(num_jobs)]  # Replicate the work_dir path for each job
+    num_samples = [None for _ in range(num_jobs)]  # Set to None to process all videos, or specify a limit
     executor.map_array(
         main,
         video_zip,
@@ -301,6 +305,6 @@ if __name__ == "__main__":
         world_size,
         out_dir,
         work_dir,
-        num_samples=None  # Set to None to process all videos
+        num_samples
     )
     print("All jobs have been submitted.")
