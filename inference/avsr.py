@@ -1,0 +1,153 @@
+import os
+import glob
+import argparse
+from argparse import Namespace
+import zipfile
+import math
+
+import pandas as pd
+from tqdm import tqdm
+
+def main(video_zip, rank, world_size, out_dir, num_samples=None):
+    """Process a chunk of videos to extract transcriptions"""
+
+    from inference.avhubert import (
+        root, work_dir, utils, checkpoint_utils, visual_speech_recognition
+    )
+
+    out_file = os.path.join(out_dir, f"vsr_results_rank{rank:03d}.csv")
+
+    # Unzip `video_zip` to `/scr` directory
+    print(f"Extracting zip file {video_zip} to /scr directory...")
+    extract_dir = "/scr/vox2_test_mp4"
+    if os.path.exists(extract_dir):
+        os.rmdir(extract_dir)  # Remove existing directory to avoid conflicts
+    os.makedirs(extract_dir)
+    with zipfile.ZipFile(video_zip, 'r') as zip_ref:
+        zip_ref.extractall(extract_dir)
+    print("Extraction complete")
+
+    # Find all mp4 files in the extracted directory
+    print("Finding all mp4 files...")
+    video_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.mp4"), recursive=True))
+    if not video_paths:
+        print(f"No video files found in {extract_dir}")
+        return
+    print(f"Found {len(video_paths)} video files in {extract_dir}")
+
+    # Split video paths into chunks for processing
+    num_videos = len(video_paths)
+    num_chunks = world_size
+    chunk_size = math.ceil(num_videos / num_chunks)
+    start_index = rank * chunk_size
+    end_index = min(start_index + chunk_size, num_videos)
+    if start_index >= num_videos:
+        print(f"No videos to process for rank {rank}, exiting...")
+        return
+    video_paths_chunk = video_paths[start_index:end_index]
+    if not video_paths_chunk:
+        print(f"No videos found for rank {rank}, exiting...")
+        return
+    print(f"Processing {len(video_paths_chunk)} videos for rank {rank}...")
+
+    face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
+    mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
+    ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
+    cnn_detector_path = f'{root}/data/misc/mmod_human_face_detector.dat'
+
+    utils.import_user_module(Namespace(user_dir=work_dir))
+    models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
+
+    # Check for existing output and load already processed videos
+    processed_videos = set()
+    if os.path.exists(out_file):
+        try:
+            existing_df = pd.read_csv(out_file)
+            processed_videos = set(existing_df['video_path'].tolist())
+            print(f"Found {len(processed_videos)} already processed videos")
+        except Exception as e:
+            print(f"Error reading existing output file: {e}")
+
+    # Create output file if it doesn't exist
+    if not os.path.exists(out_file):
+        pd.DataFrame(columns=['video_path', 'vsr_text']).to_csv(out_file, index=False)
+
+    # Process each video and extract transcriptions
+    for i, video_path in enumerate(tqdm(video_paths_chunk)):
+        if num_samples is not None and i >= num_samples:
+            print(f"Reached sample limit of {num_samples}, stopping processing.")
+            break
+
+        if video_path in processed_videos:
+            print(f"Skipping already processed video: {video_path}")
+            continue
+        if not os.path.isfile(video_path): 
+            print(f"File not found, skipping: {video_path}")
+            continue
+        # Ensure the video path is valid
+        video_path = os.path.abspath(video_path) 
+        try:
+            # Use the visual_speech_recognition function to get the transcription
+            transcription = visual_speech_recognition(
+                video_path,
+                face_predictor_path,
+                mean_face_path,
+                models,
+                saved_cfg,
+                task,
+                cnn_detector_path=cnn_detector_path
+            )
+
+            # Save the result to the output file
+            new_entry = pd.DataFrame({'video_path': [video_path], 'vsr_text': [transcription]})
+            new_entry.to_csv(out_file, mode='a', header=False, index=False)
+            print(f"Processed video {i + 1}/{len(video_paths_chunk)}: {video_path} -> {transcription}")
+        except Exception as e:
+            print(f"Error processing video {video_path}: {e}")
+    print(f"Completed processing {len(video_paths_chunk)} videos. Results saved to {out_file}.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process videos for feature extraction and transcription')
+    parser.add_argument('--video_zip_dir', type=str,
+                        default='/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/vox2_test_mp4.zip',
+                        help='Directory containing the video files to process')
+    parser.add_argument('--out_dir', type=str, default='data/vsr_outputs',
+                        help='Path to save output CSV file')
+    args = parser.parse_args()
+
+    os.makedirs(args.out_dir)
+
+    # Launch 64 batch jobs using submitit
+    import submitit
+
+    num_jobs = 32  # Number of Slurm jobs
+
+    executor = submitit.AutoExecutor(folder=args.out_dir)
+    executor.update_parameters(
+        slurm_partition="ckpt",
+        slurm_gres="gpu:1",
+        slurm_account="intelligentsystems",
+        slurm_ntasks_per_node=1,
+        slurm_time="24:00:00",
+        slurm_mem="16G",
+        slurm_constraint="rtx6k",
+        cpus_per_task=8,  # Increase CPUs per task to match cluster configuration
+        name="avhubert_vsr",
+        nodes=1,
+    )
+
+    video_zip = [args.video_zip_dir for _ in range(num_jobs)]  # Replicate the video_zip path for each job
+    rank = [ i for i in range(num_jobs)]  # Create a list of ranks from 0 to num_jobs-1
+    world_size = [num_jobs for _ in range(num_jobs)]  # All jobs have the same world size
+    out_dir = [args.out_dir for _ in range(num_jobs)]  # Replicate the out_dir path for each job
+    num_samples = [None for _ in range(num_jobs)]  # Set to None to process all videos, or specify a limit
+    executor.map_array(
+        main,
+        video_zip,
+        rank,
+        world_size,
+        out_dir,
+        num_samples
+    )
+    print("All jobs have been submitted.")
