@@ -1,0 +1,5 @@
+whisperx==3.3.1
+ipykernel
+GitPython
+pandas
+submitit
