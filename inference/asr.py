@@ -59,7 +59,7 @@ def transcribe_audio_files(audio_paths, out_file):
     # Load WhisperX model
     print("Loading WhisperX model...")
     device = "cuda"
-    model = whisperx.load_model("large-v2", device, language='en')
+    model = whisperx.load_model("large-v2", device)
 
     # Check for existing output and load already processed audios
     processed_audios = set()
@@ -90,6 +90,7 @@ def transcribe_audio_files(audio_paths, out_file):
             # Use WhisperX to transcribe audio
             audio = whisperx.load_audio(audio_path)
             result = model.transcribe(audio)
+            assert result['language'] == 'en'
             transcription = ' '.join([x['text'] for x in result["segments"]])
 
             # Save the result to the output file
