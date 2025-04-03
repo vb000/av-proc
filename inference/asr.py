@@ -11,11 +11,8 @@ import subprocess
 import whisperx
 
 
-def main(audio_zip, rank, world_size, out_dir, num_samples=None):
-    """Process a chunk of audio files to extract transcriptions using WhisperX"""
-
-    out_file = os.path.join(out_dir, f"asr_results_rank{rank:03d}.csv")
-
+def get_audio_chunk(audio_zip, rank, world_size, num_samples=None):
+    """Extract audio files from zip and return the chunk for this rank"""
     # Use subprocess to unzip audio_zip to /scr directory
     print(f"Extracting zip file {audio_zip} to /scr directory...")
     extract_dir = f"/scr/audio_files/{rank:03d}"
@@ -30,24 +27,34 @@ def main(audio_zip, rank, world_size, out_dir, num_samples=None):
     audio_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.m4a"), recursive=True))
     if not audio_paths:
         print(f"No audio files found in {extract_dir}")
-        return
+        return []
     print(f"Found {len(audio_paths)} audio files in {extract_dir}")
 
     # Split audio paths into chunks for processing
     num_audios = len(audio_paths)
-    num_chunks = world_size
-    chunk_size = math.ceil(num_audios / num_chunks)
+    chunk_size = math.ceil(num_audios / world_size)
     start_index = rank * chunk_size
     end_index = min(start_index + chunk_size, num_audios)
+
     if start_index >= num_audios:
         print(f"No audio files to process for rank {rank}, exiting...")
-        return
+        return []
+
     audio_paths_chunk = audio_paths[start_index:end_index]
     if not audio_paths_chunk:
         print(f"No audio files found for rank {rank}, exiting...")
-        return
+        return []
+
     print(f"Processing {len(audio_paths_chunk)} audio files for rank {rank}...")
 
+    # Limit samples if specified
+    if num_samples is not None:
+        audio_paths_chunk = audio_paths_chunk[:num_samples]
+
+    return audio_paths_chunk
+
+def transcribe_audio_files(audio_paths, out_file):
+    """Process a list of audio files to extract transcriptions using WhisperX"""
     # Load WhisperX model
     print("Loading WhisperX model...")
     device = "cuda"
@@ -68,11 +75,7 @@ def main(audio_zip, rank, world_size, out_dir, num_samples=None):
         pd.DataFrame(columns=['audio_path', 'asr_text']).to_csv(out_file, index=False)
 
     # Process each audio file and extract transcriptions
-    for i, audio_path in enumerate(tqdm(audio_paths_chunk)):
-        if num_samples is not None and i >= num_samples:
-            print(f"Reached sample limit of {num_samples}, stopping processing.")
-            break
-
+    for i, audio_path in enumerate(tqdm(audio_paths)):
         if audio_path in processed_audios:
             print(f"Skipping already processed audio: {audio_path}")
             continue
@@ -91,10 +94,25 @@ def main(audio_zip, rank, world_size, out_dir, num_samples=None):
             # Save the result to the output file
             new_entry = pd.DataFrame({'audio_path': [audio_path], 'asr_text': [transcription]})
             new_entry.to_csv(out_file, mode='a', header=False, index=False)
-            print(f"Processed audio {i + 1}/{len(audio_paths_chunk)}: {audio_path} -> {transcription}")
+            print(f"Processed audio {i + 1}/{len(audio_paths)}: {audio_path} -> {transcription}")
         except Exception as e:
             print(f"Error processing audio {audio_path}: {e}")
-    print(f"Completed processing {len(audio_paths_chunk)} audio files. Results saved to {out_file}.")
+
+    print(f"Completed processing {len(audio_paths)} audio files. Results saved to {out_file}.")
+
+def main(audio_zip, rank, world_size, out_dir, num_samples=None):
+    """Process a chunk of audio files to extract transcriptions using WhisperX"""
+    out_file = os.path.join(out_dir, f"asr_results_rank{rank:03d}.csv")
+
+    # Get the chunk of audio files for this rank
+    audio_paths_chunk = get_audio_chunk(audio_zip, rank, world_size, num_samples)
+
+    # Exit if no files to process
+    if not audio_paths_chunk:
+        return
+
+    # Process the audio files
+    transcribe_audio_files(audio_paths_chunk, out_file)
 
 
 if __name__ == "__main__":
