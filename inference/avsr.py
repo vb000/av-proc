@@ -173,7 +173,7 @@ if __name__ == "__main__":
         )
         print(f"Running in local mode, processing {len(video_paths_chunk)} videos...")
         if video_paths_chunk:
-            process_videos(video_paths_chunk, out_file, rank=0)
+            process_videos(video_paths_chunk, out_file)
         else:
             print("No video files found to process in local mode.")
         exit(0)
