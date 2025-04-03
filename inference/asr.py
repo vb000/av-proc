@@ -53,6 +53,7 @@ def get_audio_chunk(audio_zip, rank, world_size, num_samples=None):
 
     return audio_paths_chunk
 
+
 def transcribe_audio_files(audio_paths, out_file):
     """Process a list of audio files to extract transcriptions using WhisperX"""
     # Load WhisperX model
@@ -99,6 +100,7 @@ def transcribe_audio_files(audio_paths, out_file):
             print(f"Error processing audio {audio_path}: {e}")
 
     print(f"Completed processing {len(audio_paths)} audio files. Results saved to {out_file}.")
+
 
 def main(audio_zip, rank, world_size, out_dir, num_samples=None):
     """Process a chunk of audio files to extract transcriptions using WhisperX"""
