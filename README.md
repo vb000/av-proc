@@ -16,5 +16,6 @@
 
         conda create -n whisperx python=3.10
         conda activate whisperx
-        conda install pytorch==2.0.0 torchaudio==2.0.0 pytorch-cuda=11.8 -c pytorch -c nvidia
-        pip install whisperx==3.3.1
+        conda install -y conda-forge::ffmpeg
+        conda install -y pytorch==2.0.0 torchaudio==2.0.0 pytorch-cuda=11.8 -c pytorch -c nvidia
+        pip install -r whisperx_requirements.txt
