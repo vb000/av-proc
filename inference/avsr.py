@@ -168,9 +168,9 @@ if __name__ == "__main__":
 
     if args.local:
         out_file = 'temp.csv'
-        video_paths_chunk = glob.glob(
+        video_paths_chunk = sorted(glob.glob(
             '/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM/*.mp4'
-        )
+        ))
         print(f"Running in local mode, processing {len(video_paths_chunk)} videos...")
         if video_paths_chunk:
             process_videos(video_paths_chunk, out_file)

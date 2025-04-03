@@ -140,10 +140,10 @@ if __name__ == "__main__":
 
     if args.local:
         print("Running in local mode, processing all audio files...")
-        audio_paths = glob.glob(
+        audio_paths = sorted(glob.glob(
             '/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/aac/id00017/7t6lfzvVaTM'
             '/*.m4a', recursive=True
-        )
+        ))
         print(f"Found {len(audio_paths)} audio files in local mode.")
         if audio_paths:
             transcribe_audio_files(audio_paths, "temp.csv")
