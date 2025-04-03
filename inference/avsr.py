@@ -10,15 +10,18 @@ import submitit
 import subprocess
 
 
-def main(video_zip, rank, world_size, out_dir, num_samples=None):
-    """Process a chunk of videos to extract transcriptions"""
+def get_video_paths_chunk(video_zip, rank, world_size, num_samples=None):
+    """Extract a chunk of video paths based on rank and world size.
 
-    from inference.avhubert import (
-        root, work_dir, utils, checkpoint_utils, visual_speech_recognition
-    )
+    Args:
+        video_zip (str): Path to zip file containing videos
+        rank (int): Current process rank
+        world_size (int): Total number of processes
+        num_samples (int, optional): Maximum number of samples to process
 
-    out_file = os.path.join(out_dir, f"vsr_results_rank{rank:03d}.csv")
-
+    Returns:
+        list: List of video file paths for this chunk
+    """
     # Use subprocess to unzip video_zip to /scr directory
     print(f"Extracting zip file {video_zip} to /scr directory...")
     extract_dir = f"/scr/vox2_test_mp4/{rank:03d}"
@@ -33,24 +36,48 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
     video_paths = sorted(glob.glob(os.path.join(extract_dir, "**", "*.mp4"), recursive=True))
     if not video_paths:
         print(f"No video files found in {extract_dir}")
-        return
+        return []
     print(f"Found {len(video_paths)} video files in {extract_dir}")
 
     # Split video paths into chunks for processing
     num_videos = len(video_paths)
-    num_chunks = world_size
-    chunk_size = math.ceil(num_videos / num_chunks)
+    chunk_size = math.ceil(num_videos / world_size)
     start_index = rank * chunk_size
     end_index = min(start_index + chunk_size, num_videos)
+
     if start_index >= num_videos:
         print(f"No videos to process for rank {rank}, exiting...")
-        return
+        return []
+
     video_paths_chunk = video_paths[start_index:end_index]
     if not video_paths_chunk:
         print(f"No videos found for rank {rank}, exiting...")
-        return
+        return []
+
     print(f"Processing {len(video_paths_chunk)} videos for rank {rank}...")
 
+    # Limit number of samples if specified
+    if num_samples is not None:
+        video_paths_chunk = video_paths_chunk[:num_samples]
+        print(f"Limited to {len(video_paths_chunk)} samples")
+
+    return video_paths_chunk
+
+
+def process_videos(video_paths, out_file):
+    """Process videos to extract transcriptions.
+
+    Args:
+        video_paths (list): List of video paths to process
+        out_file (str): Path to output CSV file
+        rank (int): Current process rank
+    """
+    # Import necessary modules only when needed
+    from inference.avhubert import (
+        visual_speech_recognition, root, work_dir, utils, checkpoint_utils
+    )
+
+    # Load models and resources
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
     ckpt_path = f"{root}/data/checkpoints/self_large_vox_433h.pt"
@@ -64,7 +91,7 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
     if os.path.exists(out_file):
         try:
             existing_df = pd.read_csv(out_file)
-            processed_videos = set(existing_df['video_path'].tolist())
+            processed_videos = set(existing_df['path'].tolist())
             print(f"Found {len(processed_videos)} already processed videos")
         except Exception as e:
             print(f"Error reading existing output file: {e}")
@@ -74,19 +101,16 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
         pd.DataFrame(columns=['path', 'text']).to_csv(out_file, index=False)
 
     # Process each video and extract transcriptions
-    for i, video_path in enumerate(tqdm(video_paths_chunk)):
-        if num_samples is not None and i >= num_samples:
-            print(f"Reached sample limit of {num_samples}, stopping processing.")
-            break
-
+    for i, video_path in enumerate(tqdm(video_paths)):
         if video_path in processed_videos:
             print(f"Skipping already processed video: {video_path}")
             continue
-        if not os.path.isfile(video_path): 
+        if not os.path.isfile(video_path):
             print(f"File not found, skipping: {video_path}")
             continue
+
         # Ensure the video path is valid
-        video_path = os.path.abspath(video_path) 
+        video_path = os.path.abspath(video_path)
         try:
             # Use the visual_speech_recognition function to get the transcription
             transcription = visual_speech_recognition(
@@ -102,10 +126,25 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
             # Save the result to the output file
             new_entry = pd.DataFrame({'path': [video_path], 'text': [transcription]})
             new_entry.to_csv(out_file, mode='a', header=False, index=False)
-            print(f"Processed video {i + 1}/{len(video_paths_chunk)}: {video_path} -> {transcription}")
+            print(f"Processed video {i + 1}/{len(video_paths)}: {video_path} -> {transcription}")
         except Exception as e:
             print(f"Error processing video {video_path}: {e}")
-    print(f"Completed processing {len(video_paths_chunk)} videos. Results saved to {out_file}.")
+
+    print(f"Completed processing {len(video_paths)} videos. Results saved to {out_file}.")
+
+
+def main(video_zip, rank, world_size, out_dir, num_samples=None):
+    """Process a chunk of videos to extract transcriptions"""
+    out_file = os.path.join(out_dir, f"vsr_results_rank{rank:03d}.csv")
+
+    # Extract videos and get paths chunk
+    video_paths_chunk = get_video_paths_chunk(video_zip, rank, world_size, num_samples)
+
+    if not video_paths_chunk:
+        return
+
+    # Process videos and extract transcriptions
+    process_videos(video_paths_chunk, out_file)
 
 
 if __name__ == "__main__":
@@ -123,7 +162,21 @@ if __name__ == "__main__":
                         help='Slurm account to use')
     parser.add_argument('--num_samples', type=int, default=None,
                         help='Number of video samples to process per job (None for all)')
+    parser.add_argument('--local', action='store_true',
+                        help='Run locally instead of using Slurm for testing purposes')
     args = parser.parse_args()
+
+    if args.local:
+        out_file = 'temp.csv'
+        video_paths_chunk = glob.glob(
+            '/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/mp4/id00017/7t6lfzvVaTM/*.mp4'
+        )
+        print(f"Running in local mode, processing {len(video_paths_chunk)} videos...")
+        if video_paths_chunk:
+            process_videos(video_paths_chunk, out_file, rank=0)
+        else:
+            print("No video files found to process in local mode.")
+        exit(0)
 
     os.makedirs(args.out_dir, exist_ok=True)  # Create output directory if it doesn't exist
 
