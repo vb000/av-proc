@@ -4,3 +4,5 @@ ipykernel
 GitPython
 pandas
 submitit
+jiwer
+
