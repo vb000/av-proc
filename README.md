@@ -16,6 +16,6 @@
 
         conda create -n whisperx python=3.10
         conda activate whisperx
-        pip install torch==2.2.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118
+        pip install torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
         pip install -r whisperx_requirements.txt
         conda install -y conda-forge::ffmpeg
