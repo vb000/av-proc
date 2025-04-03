@@ -141,6 +141,7 @@ if __name__ == "__main__":
         slurm_time="24:00:00",
         slurm_mem="32G",
         slurm_constraint="rtx6k",
+        cpus_per_task=4,  # Number of CPU cores per task
         name="avhubert_vsr",
         nodes=1,
     )
