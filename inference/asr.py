@@ -90,11 +90,12 @@ def transcribe_audio_files(audio_paths, out_file):
             # Use WhisperX to transcribe audio
             audio = whisperx.load_audio(audio_path)
             result = model.transcribe(audio)
-            assert result['language'] == 'en'
             transcription = ' '.join([x['text'] for x in result["segments"]])
 
             # Save the result to the output file
-            new_entry = pd.DataFrame({'audio_path': [audio_path], 'asr_text': [transcription]})
+            new_entry = pd.DataFrame(
+                {'path': [audio_path], 'text': [transcription], 'language': [result['language']]}
+            )
             new_entry.to_csv(out_file, mode='a', header=False, index=False)
             print(f"Processed audio {i + 1}/{len(audio_paths)}: {audio_path} -> {transcription}")
         except Exception as e:

@@ -53,7 +53,7 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
 
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
-    ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
+    ckpt_path = f"{root}/data/checkpoints/self_large_vox_433h.pt"
     cnn_detector_path = f'{root}/data/misc/mmod_human_face_detector.dat'
 
     utils.import_user_module(Namespace(user_dir=work_dir))
@@ -100,7 +100,7 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
             )
 
             # Save the result to the output file
-            new_entry = pd.DataFrame({'video_path': [video_path], 'vsr_text': [transcription]})
+            new_entry = pd.DataFrame({'path': [video_path], 'text': [transcription]})
             new_entry.to_csv(out_file, mode='a', header=False, index=False)
             print(f"Processed video {i + 1}/{len(video_paths_chunk)}: {video_path} -> {transcription}")
         except Exception as e:

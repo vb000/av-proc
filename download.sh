@@ -11,3 +11,4 @@ wget --content-disposition https://dl.fbaipublicfiles.com/avhubert/demo/avhubert
 mkdir -p data/checkpoints
 wget --content-disposition https://dl.fbaipublicfiles.com/avhubert/model/lrs3_vox/vsr/base_vox_433h.pt -O data/checkpoints/base_vox_433h.pt
 wget --content-disposition https://dl.fbaipublicfiles.com/avhubert/model/lrs3_vox/vsr/large_vox_433h.pt -O data/checkpoints/large_vox_433h.pt
+wget --content-disposition https://dl.fbaipublicfiles.com/avhubert/model/lrs3_vox/vsr/self_large_vox_433h.pt -O data/checkpoints/self_large_vox_433h.pt
