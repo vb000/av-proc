@@ -73,7 +73,7 @@ def transcribe_audio_files(audio_paths, out_file):
 
     # Create output file if it doesn't exist
     if not os.path.exists(out_file):
-        pd.DataFrame(columns=['audio_path', 'asr_text']).to_csv(out_file, index=False)
+        pd.DataFrame(columns=['path', 'text', 'language']).to_csv(out_file, index=False)
 
     # Process each audio file and extract transcriptions
     for i, audio_path in enumerate(tqdm(audio_paths)):

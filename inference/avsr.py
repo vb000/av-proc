@@ -71,7 +71,7 @@ def main(video_zip, rank, world_size, out_dir, num_samples=None):
 
     # Create output file if it doesn't exist
     if not os.path.exists(out_file):
-        pd.DataFrame(columns=['video_path', 'vsr_text']).to_csv(out_file, index=False)
+        pd.DataFrame(columns=['path', 'text']).to_csv(out_file, index=False)
 
     # Process each video and extract transcriptions
     for i, video_path in enumerate(tqdm(video_paths_chunk)):
