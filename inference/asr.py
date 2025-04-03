@@ -134,7 +134,22 @@ if __name__ == "__main__":
                         help='Slurm account to use')
     parser.add_argument('--num_samples', type=int, default=None,
                         help='Number of audio samples to process per job (None for all)')
+    parser.add_argument('--local', action='store_true',
+                        help='Run locally instead of using Slurm for testing purposes')
     args = parser.parse_args()
+
+    if args.local:
+        print("Running in local mode, processing all audio files...")
+        audio_paths = glob.glob(
+            '/mmfs1/gscratch/intelligentsystems/common_datasets/VoxCeleb2/aac/id00017/7t6lfzvVaTM'
+            '/*.m4a', recursive=True
+        )
+        print(f"Found {len(audio_paths)} audio files in local mode.")
+        if audio_paths:
+            transcribe_audio_files(audio_paths, "temp.csv")
+        else:
+            print("No audio files found to process in local mode.")
+        exit(0)
 
     os.makedirs(args.out_dir, exist_ok=True)  # Create output directory if it doesn't exist
 
