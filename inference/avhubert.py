@@ -7,9 +7,8 @@ import tempfile
 import zipfile
 import subprocess
 import math
-
+import time
 import git
-import pandas as pd
 import dlib, cv2, os
 import numpy as np
 import skvideo
@@ -17,7 +16,8 @@ import skvideo.io
 from tqdm import tqdm
 import torch
 
-FFMPEG = '/mmfs1/gscratch/cse/bandhav/miniconda3/envs/avhubert_gpu/bin/ffmpeg'
+# FFMPEG = '/mmfs1/gscratch/cse/bandhav/miniconda3/envs/avhubert_gpu/bin/ffmpeg'
+FFMPEG = '/data/home/tuochao/miniconda3/bin/ffmpeg'
 os.environ['PATH'] = f'{os.path.dirname(FFMPEG)}:' + os.environ['PATH']
 
 root = git.Repo('.', search_parent_directories=True).working_tree_dir
@@ -40,16 +40,31 @@ def detect_landmark(image, detector, predictor, cnn_detector=False):
     else:
         rects = detector(gray, 1)
     coords = None
-    for (_, rect) in enumerate(rects):
-        shape = predictor(gray, rect)
-        coords = np.zeros((68, 2), dtype=np.int32)
-        for i in range(0, 68):
-            coords[i] = (shape.part(i).x, shape.part(i).y)
+    if len(rects) < 1:
+        return coords    
+    ### if multiple faces appear and find the biggest one
+    rects_size = []
+    max_size = -9999
+    max_i = -1
+    for (i, rect) in enumerate(rects):
+        rect_size = abs(rect.right() - rect.left()) * abs(rect.top() - rect.bottom())
+        if rect_size > max_size:
+            max_size = rect_size
+            max_i = i 
+
+    ## the large one
+    rect = rects[max_i]
+    shape = predictor(gray, rect)
+    coords = np.zeros((68, 2), dtype=np.int32)
+    for i in range(0, 68):
+        coords[i] = (shape.part(i).x, shape.part(i).y)
+
     return coords
 
 
 def preprocess_video(input_video_path, output_video_path, face_predictor_path, mean_face_path,
                      cnn_detector_path=None):
+    print("output_video_path", output_video_path)
     if cnn_detector_path is not None:
         detector = dlib.cnn_face_detection_model_v1(cnn_detector_path)
     else:
@@ -59,9 +74,10 @@ def preprocess_video(input_video_path, output_video_path, face_predictor_path, m
     mean_face_landmarks = np.load(mean_face_path)
     stablePntsIDs = [33, 36, 39, 42, 45]
     videogen = skvideo.io.vread(input_video_path)
+
     frames = np.array([frame for frame in videogen])
     landmarks = []
-    for frame in frames:
+    for frame in tqdm(frames):
         landmark = detect_landmark(frame, detector, predictor, cnn_detector=cnn_detector_path is not None)
         landmarks.append(landmark)
     preprocessed_landmarks = landmarks_interpolate(landmarks)
@@ -96,17 +112,20 @@ def extract_visual_features_from_video(
     origin_clip_path, face_predictor_path, mean_face_path, models, task, cnn_detector_path=None
 ):
     # Create a temporary file for mouth_roi_path
-    with tempfile.NamedTemporaryFile(suffix='.mp4') as mouth_roi:
-        mouth_roi_path = mouth_roi.name
+    # with tempfile.NamedTemporaryFile(suffix='.mp4') as mouth_roi:
+    # mouth_roi_path = mouth_roi.name
+    mouth_roi_path = "../data/roi.mp4"
 
-        # Call the preprocess_video function
-        preprocess_video(
-            origin_clip_path, mouth_roi_path, face_predictor_path, mean_face_path,
-            cnn_detector_path=cnn_detector_path)
+    # Call the preprocess_video function
+    print("preprocess ..... ")
+    preprocess_video(
+        origin_clip_path, mouth_roi_path, face_predictor_path, mean_face_path,
+        cnn_detector_path=cnn_detector_path)
+    print("preprocess done..... ")
 
-        # Call the feature extraction function
-        feature = extract_visual_features_from_roi(mouth_roi_path, models, task)
-
+    # Call the feature extraction function
+    feature = extract_visual_features_from_roi(mouth_roi_path, models, task)
+    print("extract_visual_features_from_roi done..... ")
     # Return the feature variable
     return feature
 
@@ -170,29 +189,31 @@ def visual_speech_recognition(
 if __name__ == '__main__':
     face_predictor_path = f"{root}/data/misc/shape_predictor_68_face_landmarks.dat"
     mean_face_path = f"{root}/data/misc/20words_mean_face.npy"
+    # ckpt_path = f"{root}/data/checkpoints/self_large_vox_433h.pt"
     ckpt_path = f"{root}/data/checkpoints/base_vox_433h.pt"
     cnn_detector_path = f'{root}/data/misc/mmod_human_face_detector.dat'
 
     utils.import_user_module(Namespace(user_dir=work_dir))
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([ckpt_path])
 
-    # features = extract_visual_features_from_video(
-    #     origin_clip_path=f"{root}/data/misc/avhubert_demo_video_8s.mp4",
-    #     face_predictor_path=face_predictor_path,
-    #     mean_face_path=mean_face_path,
-    #     models=models,
-    #     task=task,
-    #     cnn_detector_path=cnn_detector_path
-    # )
-    # print(features.shape) # [seq_len, 768]
-
-    hypo = visual_speech_recognition(
-        video_path=f"{root}/data/misc/avhubert_demo_video_8s.mp4",
+    features = extract_visual_features_from_video(
+        origin_clip_path= "/fsx-ust/tuochao/voxceleb/vox2/dev/mp4/id05371/BBAPVEKJXSk/00009.mp4", #f"{root}/data/misc/avhubert_demo_video_8s.mp4",
         face_predictor_path=face_predictor_path,
         mean_face_path=mean_face_path,
         models=models,
-        saved_cfg=saved_cfg,
         task=task,
         cnn_detector_path=cnn_detector_path
     )
-    print(hypo)
+    print(features.shape) # [seq_len, 768]
+    print(features[:10, :10]) 
+
+    # hypo = visual_speech_recognition(
+    #     video_path="/fsx-ust/tuochao/voxceleb/vox2/dev/mp4/id05371/yED1DDah86w/00150.mp4", #f"{root}/data/misc/avhubert_demo_video_8s.mp4",
+    #     face_predictor_path=face_predictor_path,
+    #     mean_face_path=mean_face_path,
+    #     models=models,
+    #     saved_cfg=saved_cfg,
+    #     task=task,
+    #     cnn_detector_path=cnn_detector_path
+    # )
+    # print(hypo)
